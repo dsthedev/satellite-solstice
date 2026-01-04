@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import AnimatedBackground from "../components/AnimatedBackground.astro";
 
 const projectName = import.meta.env.PUBLIC_PROJECT_NAME || new URL(Astro.url).hostname;
 ---
@@ -14,7 +15,10 @@ const projectName = import.meta.env.PUBLIC_PROJECT_NAME || new URL(Astro.url).ho
 		<title>{projectName}</title>
 	</head>
 	<body>
-		<slot />
+		<AnimatedBackground />
+		<div class="relative z-10">
+			<slot />
+		</div>
 	</body>
 </html>
 

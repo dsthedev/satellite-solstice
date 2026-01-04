@@ -1,0 +1,194 @@
+---
+interface Props {
+	nodeCount?: number;
+	connectionDistance?: number;
+	interactionDistance?: number;
+	animationSpeed?: number;
+}
+
+const {
+	nodeCount = 100,
+	connectionDistance = 100,
+	interactionDistance = 100,
+	animationSpeed = 0.75,
+} = Astro.props;
+---
+
+<canvas id="animated-bg"></canvas>
+
+<style>
+	canvas {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		z-index: 0;
+		pointer-events: none;
+	}
+</style>
+
+<script define:vars={{ nodeCount, connectionDistance, interactionDistance, animationSpeed }}>
+	class AnimatedBackground {
+		constructor(canvas, config) {
+			this.canvas = canvas;
+			this.ctx = canvas.getContext('2d');
+			this.config = config;
+			this.nodes = [];
+			this.mousePos = { x: 0, y: 0 };
+			this.isDarkMode = document.documentElement.classList.contains('dark');
+
+			this.resize();
+			this.initNodes();
+			this.setupEventListeners();
+			requestAnimationFrame((t) => this.animate(t));
+		}
+
+		resize() {
+			this.canvas.width = window.innerWidth;
+			this.canvas.height = window.innerHeight;
+		}
+
+		initNodes() {
+			this.nodes = [];
+			for (let i = 0; i < this.config.nodeCount; i++) {
+				const swayAmp = 5 + Math.random() * 12; // subtle sway amplitude
+				const swaySpd = 0.2 + Math.random() * 0.6; // slow sway speed
+				this.nodes.push({
+					x: Math.random() * this.canvas.width,
+					y: Math.random() * this.canvas.height,
+					vx: (Math.random() - 0.5) * this.config.animationSpeed,
+					vy: (Math.random() - 0.5) * this.config.animationSpeed,
+					radius: Math.random() * 2 + 2,
+					originalVx: 0,
+					originalVy: 0,
+					phase: Math.random() * Math.PI * 2,
+					swayAmplitude: swayAmp,
+					swaySpeed: swaySpd,
+					px: 0,
+					py: 0,
+				});
+			}
+		}
+
+		setupEventListeners() {
+			window.addEventListener('mousemove', (e) => {
+				this.mousePos = { x: e.clientX, y: e.clientY };
+			});
+
+			window.addEventListener('touchmove', (e) => {
+				if (e.touches[0]) {
+					this.mousePos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+				}
+			});
+
+			window.addEventListener('touchend', () => {
+				this.mousePos = { x: -10000, y: -10000 };
+			});
+
+			window.addEventListener('mouseleave', () => {
+				this.mousePos = { x: -10000, y: -10000 };
+			});
+
+			window.addEventListener('resize', () => this.resize());
+
+			// Track dark mode changes
+			const observer = new MutationObserver(() => {
+				this.isDarkMode = document.documentElement.classList.contains('dark');
+			});
+			observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+		}
+
+		update() {
+			this.nodes.forEach((node) => {
+				// compute sway offsets based on global time
+				node.swayX = Math.cos(this.time * node.swaySpeed + node.phase) * node.swayAmplitude;
+				node.swayY = Math.sin(this.time * node.swaySpeed + node.phase) * node.swayAmplitude;
+				// drawn position including sway
+				node.px = node.x + node.swayX;
+				node.py = node.y + node.swayY;
+
+				// Return to original velocity
+				node.vx += (node.originalVx - node.vx) * 0.1;
+				node.vy += (node.originalVy - node.vy) * 0.1;
+
+				// Move node
+				node.x += node.vx;
+				node.y += node.vy;
+
+				// Wrap around edges
+				if (node.x < 0) node.x = this.canvas.width;
+				if (node.x > this.canvas.width) node.x = 0;
+				if (node.y < 0) node.y = this.canvas.height;
+				if (node.y > this.canvas.height) node.y = 0;
+
+				// Interaction with mouse
+				const dx = this.mousePos.x - node.px;
+				const dy = this.mousePos.y - node.py;
+				const distance = Math.sqrt(dx * dx + dy * dy);
+
+				if (distance < this.config.interactionDistance) {
+					const angle = Math.atan2(dy, dx);
+					const force = (1 - distance / this.config.interactionDistance) * 2;
+					node.vx -= Math.cos(angle) * force;
+					node.vy -= Math.sin(angle) * force;
+				}
+			});
+		}
+
+		draw() {
+			// Clear canvas
+			this.ctx.fillStyle = this.isDarkMode ? '#0f172a' : '#ffffff';
+			this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+			// Draw connections
+			const nodeColor = this.isDarkMode ? 'rgba(148, 163, 184, 0.5)' : 'rgba(71, 85, 105, 0.3)';
+			this.ctx.strokeStyle = nodeColor;
+			this.ctx.lineWidth = 1;
+
+			for (let i = 0; i < this.nodes.length; i++) {
+				for (let j = i + 1; j < this.nodes.length; j++) {
+					const dx = this.nodes[i].px - this.nodes[j].px;
+					const dy = this.nodes[i].py - this.nodes[j].py;
+					const distance = Math.sqrt(dx * dx + dy * dy);
+
+					if (distance < this.config.connectionDistance) {
+						const opacity = 1 - distance / this.config.connectionDistance;
+						this.ctx.strokeStyle = this.isDarkMode
+							? `rgba(148, 163, 184, ${opacity * 0.5})`
+							: `rgba(71, 85, 105, ${opacity * 0.3})`;
+						this.ctx.beginPath();
+						this.ctx.moveTo(this.nodes[i].px, this.nodes[i].py);
+						this.ctx.lineTo(this.nodes[j].px, this.nodes[j].py);
+						this.ctx.stroke();
+					}
+				}
+			}
+
+			// Draw nodes
+			const dotColor = this.isDarkMode ? 'rgba(203, 213, 225, 0.8)' : 'rgba(30, 41, 59, 0.6)';
+			this.ctx.fillStyle = dotColor;
+
+			this.nodes.forEach((node) => {
+				this.ctx.beginPath();
+				this.ctx.arc(node.px, node.py, node.radius, 0, Math.PI * 2);
+				this.ctx.fill();
+			});
+		}
+
+		animate(timestamp) {
+			this.time = (timestamp || performance.now()) / 1000;
+			this.update();
+			this.draw();
+			requestAnimationFrame((t) => this.animate(t));
+		}
+	}
+
+		const canvas = document.getElementById('animated-bg');
+		new AnimatedBackground(canvas, {
+			nodeCount: parseInt(nodeCount),
+			connectionDistance: parseInt(connectionDistance),
+			interactionDistance: parseInt(interactionDistance),
+			animationSpeed: parseFloat(animationSpeed),
+		});
+</script>
