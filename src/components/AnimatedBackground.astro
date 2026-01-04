@@ -1,17 +1,25 @@
 ---
 interface Props {
 	nodeCount?: number;
-	connectionDistance?: number;
-	interactionDistance?: number;
-	animationSpeed?: number;
+ 	connectionDistance?: number;
+ 	interactionDistance?: number;
+ 	animationSpeed?: number;
+ 	baseNodeSize?: number;
+ 	nodeSizeVariance?: number;
+ 	nodeColor?: string;
+ 	lineColor?: string;
 }
 
 const {
 	nodeCount = 100,
-	connectionDistance = 100,
-	interactionDistance = 100,
-	animationSpeed = 0.75,
-} = Astro.props;
+ 	connectionDistance = 100,
+ 	interactionDistance = 100,
+ 	animationSpeed = 0.75,
+ 	baseNodeSize = 1.5,
+ 	nodeSizeVariance = 1.5,
+ 	nodeColor = "",
+ 	lineColor = "",
+} = Astro.props as Props;
 ---
 
 <canvas id="animated-bg"></canvas>
@@ -28,7 +36,7 @@ const {
 	}
 </style>
 
-<script define:vars={{ nodeCount, connectionDistance, interactionDistance, animationSpeed }}>
+<script define:vars={{ nodeCount, connectionDistance, interactionDistance, animationSpeed, baseNodeSize, nodeSizeVariance, nodeColor, lineColor }}>
 	class AnimatedBackground {
 		constructor(canvas, config) {
 			this.canvas = canvas;
@@ -59,7 +67,7 @@ const {
 					y: Math.random() * this.canvas.height,
 					vx: (Math.random() - 0.5) * this.config.animationSpeed,
 					vy: (Math.random() - 0.5) * this.config.animationSpeed,
-					radius: Math.random() * 2 + 2,
+					radius: (this.config.baseNodeSize || 1) + Math.random() * (this.config.nodeSizeVariance || 1),
 					originalVx: 0,
 					originalVy: 0,
 					phase: Math.random() * Math.PI * 2,
@@ -137,13 +145,14 @@ const {
 		}
 
 		draw() {
-			// Clear canvas
-			this.ctx.fillStyle = this.isDarkMode ? '#0f172a' : '#ffffff';
-			this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+			// Clear canvas to transparent so CSS background shows through
+			this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
 			// Draw connections
-			const nodeColor = this.isDarkMode ? 'rgba(148, 163, 184, 0.5)' : 'rgba(71, 85, 105, 0.3)';
-			this.ctx.strokeStyle = nodeColor;
+			const computed = getComputedStyle(document.documentElement);
+			const defaultLineDark = 'rgba(148, 163, 184, 0.5)';
+			const defaultLineLight = 'rgba(71, 85, 105, 0.3)';
+			const strokeBase = this.config.lineColor || computed.getPropertyValue('--line')?.trim() || (this.isDarkMode ? defaultLineDark : defaultLineLight);
 			this.ctx.lineWidth = 1;
 
 			for (let i = 0; i < this.nodes.length; i++) {
@@ -154,20 +163,22 @@ const {
 
 					if (distance < this.config.connectionDistance) {
 						const opacity = 1 - distance / this.config.connectionDistance;
-						this.ctx.strokeStyle = this.isDarkMode
-							? `rgba(148, 163, 184, ${opacity * 0.5})`
-							: `rgba(71, 85, 105, ${opacity * 0.3})`;
 						this.ctx.beginPath();
 						this.ctx.moveTo(this.nodes[i].px, this.nodes[i].py);
 						this.ctx.lineTo(this.nodes[j].px, this.nodes[j].py);
+						this.ctx.save();
+						this.ctx.globalAlpha = opacity * 0.6;
+						this.ctx.strokeStyle = strokeBase;
 						this.ctx.stroke();
+						this.ctx.restore();
 					}
 				}
 			}
 
 			// Draw nodes
-			const dotColor = this.isDarkMode ? 'rgba(203, 213, 225, 0.8)' : 'rgba(30, 41, 59, 0.6)';
-			this.ctx.fillStyle = dotColor;
+			const defaultDotDark = 'rgba(203, 213, 225, 0.9)';
+			const defaultDotLight = 'rgba(30, 41, 59, 0.8)';
+			this.ctx.fillStyle = this.config.nodeColor || computed.getPropertyValue('--dot')?.trim() || (this.isDarkMode ? defaultDotDark : defaultDotLight);
 
 			this.nodes.forEach((node) => {
 				this.ctx.beginPath();
@@ -190,5 +201,9 @@ const {
 			connectionDistance: parseInt(connectionDistance),
 			interactionDistance: parseInt(interactionDistance),
 			animationSpeed: parseFloat(animationSpeed),
+			baseNodeSize: parseFloat(baseNodeSize),
+			nodeSizeVariance: parseFloat(nodeSizeVariance),
+			nodeColor: nodeColor,
+			lineColor: lineColor,
 		});
 </script>
